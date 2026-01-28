@@ -64,12 +64,43 @@
 
 pub mod fields;
 pub mod interfaces;
+pub mod internal;
 pub mod macros;
+#[cfg(feature = "register_types")]
+mod registers_macro;
 
 #[cfg(feature = "register_types")]
 pub mod registers;
 
 pub mod debug;
+
+#[cfg(feature = "register_types")]
+mod array;
+#[cfg(feature = "register_types")]
+pub use array::{RealRegisterArray, RegisterArray};
+
+#[cfg(feature = "register_types")]
+mod bus;
+#[cfg(feature = "register_types")]
+pub use bus::{Address, Block, Bus};
+
+#[cfg(feature = "register_types")]
+mod mmio;
+#[cfg(feature = "register_types")]
+pub use mmio::{Mmio32, Mmio64};
+
+mod read;
+#[cfg(feature = "register_types")]
+pub use read::BusRead;
+pub use read::Read;
+
+mod register_trait;
+pub use register_trait::{DataType, Register};
+
+mod write;
+#[cfg(feature = "register_types")]
+pub use write::BusWrite;
+pub use write::Write;
 
 mod local_register;
 pub use local_register::LocalRegisterCopy;
