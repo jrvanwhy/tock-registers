@@ -1,0 +1,182 @@
+// Licensed under the Apache License, Version 2.0 or the MIT License.
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright Tock Contributors 2026.
+// Copyright Better Bytes 2026.
+
+use super::*;
+use crate::test_util::assert_tokens_eq;
+use syn::parse_quote;
+
+// TODO: Add attribute test cases (cfg and doc comments).
+
+/// This serves two purposes: it tests the code generation of single scalar register definitions,
+/// and also documents (via comments) some of the trickier parts of the generated code.
+#[test]
+fn scalar_definition_example() {
+    let input = parse_quote! {
+        ::tock_registers
+        #[buses(Mmio32, Mmio64)]
+        pub foo: u8 { Read, Write },
+    };
+    let expected = quote! {
+        pub mod foo {
+            use super::*;
+            pub trait Interface: ::tock_registers::Register<DataType = u8> + Read + Write {}
+            pub trait Bus:
+                // Bus needs this bound so that the Block impl for Real<B> can access PADDED_SIZE.
+                // It would be ideal to be able to bound BusRead/BusWrite as well, as that would
+                // allow us to remove the `where` clause from the `Interface for Real<B>` impl.
+                // However, we have to get those trait names from the operations' macros, and you
+                // cannot invoke macros from bounds list, so it is difficult to implement that
+                // bound. So we only generate the Bus<> bound, as it is the only necessary bound.
+                ::tock_registers::DataTypeBus<u8>
+                + sealed::Bus {}
+            impl Bus for Mmio32 {}
+            impl Bus for Mmio64 {}
+            impl sealed::Bus for Mmio32 {}
+            impl sealed::Bus for Mmio64 {}
+            mod sealed { pub trait Bus {} }
+            pub struct Real<B: Bus>(B);
+            impl<B: Bus> Real<B> {
+                pub unsafe fn new(address: B) -> Self { Self(address) }
+            }
+            impl<B: Bus> ::tock_registers::internal::core::clone::Clone for Real<B> {
+                fn clone(&self) -> Self { *self }
+            }
+            impl<B: Bus> ::tock_registers::internal::core::marker::Copy for Real<B> {}
+            impl<B: Bus> ::tock_registers::Block for Real<B> {
+                type Address = B;
+                const SIZE: usize = <B as ::tock_registers::DataTypeBus<u8>>::PADDED_SIZE;
+                unsafe fn new(address: B) -> Self { Self(address) }
+            }
+            impl<B: Bus> ::tock_registers::Register for Real<B> { type DataType = u8; }
+            Read!(real_impl, Real, u8,);
+            Write!(real_impl, Real, u8,);
+            impl<B: Bus> Interface for Real<B> where
+                // Rust understands that Real<B> always implements Register, but it does not
+                // understand that Register::DataType is always u8. Therefore we have to add this
+                // bound, to match the bounds on the `Interface` trait definition.
+                Self: ::tock_registers::Register<DataType = u8>
+                // We have the same issue as Bus here -- Rust doesn't know that every Bus impl is
+                // BusRead/BusWrite so it doesn't know that every Real<> is Read/Write. Therefore
+                // we have to bound Read + Write here to match Interface's definition.
+                + Read + Write {}
+        }
+    };
+    assert_tokens_eq(generate(input), expected);
+}
+
+/// This serves two purposes: it tests the code generation of single array register definitions,
+/// and also documents (via comments) some of the trickier parts of the generated code.
+#[test]
+fn array_definition_example() {
+    let input = parse_quote! {
+        ::tock_registers
+        #[buses(Mmio32, Mmio64)]
+        pub foo: [[u8; 2]; 3] { Read, Write }
+    };
+    let expected = quote! {
+        pub mod foo {
+            use super::*;
+            // For arrays, we wrap the element's operations in a RegisterArray<> trait (nesting if
+            // the array is nested). I'd like to constrain LEN here, but Rust does not support
+            // equality constraints on associated constants yet, so that has to be unconstrained.
+            pub trait Interface: ::tock_registers::RegisterArray<
+                Element: ::tock_registers::RegisterArray<
+                    Element: ::tock_registers::Register<DataType = u8> + Read + Write
+                >
+            > {}
+            pub trait Bus: ::tock_registers::DataTypeBus<u8> + sealed::Bus {}
+            impl Bus for Mmio32 {}
+            impl Bus for Mmio64 {}
+            impl sealed::Bus for Mmio32 {}
+            impl sealed::Bus for Mmio64 {}
+            mod sealed { pub trait Bus {} }
+            pub struct Element<B: Bus>(B);
+            impl<B: Bus> Element<B> {
+                pub unsafe fn new(address: B) -> Self { Self(address) }
+            }
+            impl<B: Bus> ::tock_registers::internal::core::clone::Clone for Element<B> {
+                fn clone(&self) -> Self { *self }
+            }
+            impl<B: Bus> ::tock_registers::internal::core::marker::Copy for Element<B> {}
+            impl<B: Bus> ::tock_registers::Block for Element<B> {
+                type Address = B;
+                const SIZE: usize = <B as ::tock_registers::DataTypeBus<u8>>::PADDED_SIZE;
+                unsafe fn new(address: B) -> Self { Self(address) }
+            }
+            impl<B: Bus> ::tock_registers::Register for Element<B> { type DataType = u8; }
+            Read!(real_impl, Element, u8,);
+            Write!(real_impl, Element, u8,);
+            pub type Real<B> = ::tock_registers::RealRegisterArray<
+                ::tock_registers::RealRegisterArray<Element<B>, 2>, 3
+            >;
+            impl<B: Bus> Interface for Real<B> where
+                // Rust DOES understand that RealRegisterArray<> implements RegisterArray<>, so we
+                // don't need to fully copy Interface's bounds list here. However, we do need to
+                // copy the bounds on the innermost element type, for the same reasons as for
+                // scalar registers.
+                Element<B>: ::tock_registers::Register<DataType = u8> + Read + Write {}
+        }
+    };
+    assert_tokens_eq(generate(input), expected);
+}
+
+/// This serves two purposes: it tests the code generation of single scalar register references,
+/// and also documents (via comments) some of the trickier parts of the generated code.
+#[test]
+fn scalar_reference_example() {
+    let input = parse_quote! {
+        ::tock_registers
+        #[buses(Mmio32, Mmio64)]
+        pub foo: status,
+    };
+    let expected = quote! {
+        pub mod foo {
+            use super::*;
+            pub trait Interface: status::Interface {}
+            pub trait Bus: status::Bus + sealed::Bus {}
+            impl Bus for Mmio32 {}
+            impl Bus for Mmio64 {}
+            impl sealed::Bus for Mmio32 {}
+            impl sealed::Bus for Mmio64 {}
+            mod sealed { pub trait Bus {} }
+            pub type Real<B> = status::Real<B>;
+            impl<B: Bus> Interface for Real<B> where
+                // Similar to definitions, without this bound Rust does not understand that every
+                // Bus implements BusRead/BusWrite as needed.
+                Self: status::Interface {}
+        }
+    };
+    assert_tokens_eq(generate(input), expected);
+}
+
+/// This serves two purposes: it tests the code generation of single array register references, and
+/// also documents (via comments) some of the trickier parts of the generated code.
+#[test]
+fn array_reference_example() {
+    let input = parse_quote! {
+        ::tock_registers
+        #[buses(Mmio32, Mmio64)]
+        pub foo: [[status; 2]; 3],
+    };
+    let expected = quote! {
+        pub mod foo {
+            use super::*;
+            pub trait Interface: ::tock_registers::RegisterArray<
+                Element: ::tock_registers::RegisterArray<Element: status::Interface>
+            > {}
+            pub trait Bus: status::Bus + sealed::Bus {}
+            impl Bus for Mmio32 {}
+            impl Bus for Mmio64 {}
+            impl sealed::Bus for Mmio32 {}
+            impl sealed::Bus for Mmio64 {}
+            mod sealed { pub trait Bus {} }
+            pub type Real<B> = ::tock_registers::RealRegisterArray<
+                ::tock_registers::RealRegisterArray<status::Real<B>, 2>,
+            3>;
+            impl<B: Bus> Interface for Real<B> where status::Real<B>: status::Interface {}
+        }
+    };
+    assert_tokens_eq(generate(input), expected);
+}
