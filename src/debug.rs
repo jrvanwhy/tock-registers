@@ -12,10 +12,8 @@
 use core::fmt;
 use core::marker::PhantomData;
 
-use crate::{
-    fields::{Field, TryFromValue},
-    RegisterLongName, UIntLike,
-};
+use crate::fields::{Field, TryFromValue};
+use crate::{RegisterLongName, UIntLike};
 
 /// `FieldValueEnumSeq` is a debug helper trait representing a sequence of
 /// [field enum types](crate::fields::Field::read_as_enum).
