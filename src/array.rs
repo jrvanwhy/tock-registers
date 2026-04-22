@@ -10,7 +10,7 @@ use core::marker::PhantomData;
 /// type should only implement RegisterArray for a single Len.
 pub trait RegisterArray<L: Len>: Copy {
     /// The type of each element of this array.
-    type Element: Copy;
+    type Element;
 
     // Default implementations of get() and get_unchecked() are provided that depend on each other.
     // RealArray implementations need to implement at least one of the methods to avoid infinite
@@ -19,7 +19,7 @@ pub trait RegisterArray<L: Len>: Copy {
     // implement get().
 
     /// Returns the `index`-th element of this array, or `None` if `index >= L::LEN`.
-    fn get(self, index: usize) -> Option<Self::Element> {
+    fn get(&self, index: usize) -> Option<Self::Element> {
         if index >= L::LEN {
             return None;
         }
@@ -33,7 +33,7 @@ pub trait RegisterArray<L: Len>: Copy {
     /// `index` must be less than `L::LEN`
     // Because this default implementation will only be used in testing environments, it's okay
     // (and beneficial) for it to have a runtime check.
-    unsafe fn get_unchecked(self, index: usize) -> Self::Element {
+    unsafe fn get_unchecked(&self, index: usize) -> Self::Element {
         self.get(index).unwrap_or_else(|| {
             panic!(
                 "get_unchecked called with out-of-bounds index {index}; len = {}",
@@ -145,7 +145,7 @@ impl<Element: Block, L: Len> Copy for RealRegisterArray<Element, L> {}
 impl<Element: Block, L: Len> RegisterArray<L> for RealRegisterArray<Element, L> {
     type Element = Element;
 
-    unsafe fn get_unchecked(self, index: usize) -> Element {
+    unsafe fn get_unchecked(&self, index: usize) -> Element {
         let offset = index * Element::SIZE;
         // Safety:
         // We know `address` points to an array of `L::LEN` `Element`s. The caller guaranteed that

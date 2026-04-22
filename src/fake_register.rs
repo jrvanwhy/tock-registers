@@ -263,7 +263,7 @@ impl<Data: Copy, Element: Copy, L: Len> Copy for FakeRegisterArray<Data, Element
 impl<Data: Copy, Element: Copy, L: Len> RegisterArray<L> for FakeRegisterArray<Data, Element, L> {
     type Element = Element;
 
-    fn get(self, index: usize) -> Option<Element> {
+    fn get(&self, index: usize) -> Option<Element> {
         (self.get)(self.data, index)
     }
 }

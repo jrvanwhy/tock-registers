@@ -4,14 +4,20 @@
 // Copyright Better Bytes 2026.
 
 use super::register_definition;
-use crate::ast::{Definition, Field, FieldDef, PerBusInt};
+use crate::ast::{Definition, Field, FieldDef, PerBusInt, StateVariable};
 use crate::new_doc_comment;
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
-use syn::{spanned::Spanned, Ident, Path, TypePath};
+use syn::{spanned::Spanned, Ident, ImplItemFn, Path, TypePath};
 
 /// Generates the module for a register block.
-pub fn generate(tock_registers: &Path, definition: &Definition, fields: &[Field]) -> TokenStream {
+pub fn generate(
+    tock_registers: &Path,
+    definition: &Definition,
+    fields: &[Field],
+    state_variables: &[StateVariable],
+    methods: &[ImplItemFn],
+) -> TokenStream {
     let docs = &definition.docs;
     let visibility = &definition.visibility;
     let name = &definition.name;
@@ -101,8 +107,8 @@ pub fn generate(tock_registers: &Path, definition: &Definition, fields: &[Field]
             real = quote![#tock_registers::RealRegisterArray<#real, lens::#len_type>];
         }
         interface_fields.extend(quote! {
-            type #name: #interface_bound;
-            #(#docs)* fn #name(self) -> Self::#name;
+            type #name<'a>: #interface_bound where Self: 'a;
+            #(#docs)* fn #name<'a>(&'a self) -> Self::#name<'a>;
         });
         let name_offset = Ident::new(&format!("{name}_offset"), name.span());
         bus_offset_decls.extend(match &field.offsets {
@@ -121,12 +127,12 @@ pub fn generate(tock_registers: &Path, definition: &Definition, fields: &[Field]
             block_sizes.clear();
             for (bus_idx, bus) in buses.iter().enumerate() {
                 let offset = &field.offsets[bus_idx];
-                block_sizes.push(quote![#offset + <<Real<#bus> as Interface>::#name as #tock_registers::Block>::SIZE]);
+                block_sizes.push(quote![#offset + <<Real<#bus> as Interface>::#name<'static> as #tock_registers::Block>::SIZE]);
             }
         }
         interface_impl_items.extend(quote! {
-            type #name = #real;
-            fn #name(self) -> Self::#name {
+            type #name<'a> = #real where B: 'a;
+            fn #name<'a>(&'a self) -> Self::#name<'a> {
                 // Safety (see crate::new_doc_comment() for requirements):
                 // 1. When Self::new was called to construct `self`, the caller guaranteed that the
                 //    passed address points to registers on the bus of type B.
@@ -143,14 +149,44 @@ pub fn generate(tock_registers: &Path, definition: &Definition, fields: &[Field]
             }
         });
     }
+    let state_fields = state_variables.iter().map(|s| {
+        let name = &s.name;
+        let ty = &s.ty;
+        quote::quote! { #name: #ty }
+    });
+    let state_inits: Vec<_> = state_variables
+        .iter()
+        .map(|s| {
+            let name = &s.name;
+            let init = &s.init;
+            quote::quote! { #name: #init }
+        })
+        .collect();
+    let extension_method_trait_signatures: Vec<_> = methods
+        .iter()
+        .map(|m| {
+            let sig = &m.sig;
+            quote::quote! { #sig; }
+        })
+        .collect();
+    let extension_method_impls: Vec<_> = methods
+        .iter()
+        .map(|m| {
+            let sig = &m.sig;
+            let block = &m.block;
+            quote::quote! {
+                #sig { #block }
+            }
+        })
+        .collect();
     quote! {
         #(#docs)*
         #visibility mod #name {
-            #![allow(clippy::expl_impl_clone_on_copy)]
             #![allow(nonstandard_style)]
             use super::*;
-            #interface_comment pub trait Interface: #tock_registers::internal::core::marker::Copy {
+            #interface_comment pub trait Interface {
                 #interface_fields
+                #(#extension_method_trait_signatures)*
             }
             pub mod lens { #len_definitions }
             #bus_comment pub trait Bus: #tock_registers::Address #bus_bounds + sealed::Bus {
@@ -173,25 +209,31 @@ pub fn generate(tock_registers: &Path, definition: &Definition, fields: &[Field]
             mod sealed { pub trait Bus {} }
             #real_comment pub struct Real<B: Bus> {
                 address: B,
+                #(#state_fields,)*
                 _phantom: #tock_registers::internal::RealPhantom,
             }
             impl<B: Bus> Real<B> {
                 #new_comment pub const unsafe fn new(address: B) -> Self {
-                    Self { address, _phantom: #tock_registers::internal::RealPhantom::new() }
+                    Self {
+                        address,
+                        #(#state_inits,)*
+                        _phantom: #tock_registers::internal::RealPhantom::new()
+                    }
                 }
             }
-            impl<B: Bus> #tock_registers::internal::core::clone::Clone for Real<B> {
-                #[inline] fn clone(&self) -> Self { *self }
-            }
-            impl<B: Bus> #tock_registers::internal::core::marker::Copy for Real<B> {}
             impl<B: Bus> Interface for Real<B> where #interface_bounds {
                 #interface_impl_items
+                #(#extension_method_impls)*
             }
             impl<B: Bus> #tock_registers::Block for Real<B> {
                 type Address = B;
                 const SIZE: usize = <B as Bus>::BLOCK_SIZE;
                 unsafe fn new(address: B) -> Self {
-                    Self { address, _phantom: #tock_registers::internal::RealPhantom::new() }
+                    Self {
+                        address,
+                        #(#state_inits,)*
+                        _phantom: #tock_registers::internal::RealPhantom::new()
+                    }
                 }
                 type Borrowed<'b> = Real<#tock_registers::BorrowedBus<'b, B>>;
             }

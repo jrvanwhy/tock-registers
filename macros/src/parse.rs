@@ -5,12 +5,18 @@
 
 //! Input parser.
 
-use crate::ast::{Definition, Field, FieldDef, Input, PerBusInt, RegisterSpec, Value};
+use crate::ast::{
+    Definition, ExtensionItem, Field, FieldDef, Input, PerBusInt, RegisterSpec, StateVariable,
+    Value,
+};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::{Brace, Bracket};
-use syn::{braced, bracketed, AttrStyle, Attribute, Error, LitInt, Meta, Result, Token, TypePath};
+use syn::{
+    braced, bracketed, AttrStyle, Attribute, Error, Expr, Ident, ImplItemFn, LitInt, Meta, Result,
+    Token, Type, TypePath,
+};
 
 impl Parse for Input {
     fn parse(input: ParseStream) -> Result<Input> {
@@ -101,11 +107,31 @@ impl Parse for Value {
         if !input.peek(Brace) {
             return Err(input.error("expected one of: `:`, `{`"));
         }
-        let fields;
-        braced!(fields in input);
-        let fields: Vec<Field> = Punctuated::<_, Token![,]>::parse_terminated(&fields)?
-            .into_iter()
-            .collect();
+
+        let fields_input;
+        braced!(fields_input in input);
+
+        // Parse fields up until hitting a semicolon:
+        let mut fields: Vec<Field> = vec![];
+        while !fields_input.peek(Token![;]) && !fields_input.is_empty() {
+            // Parse a single field:
+            fields.push(
+                fields_input
+                    .parse()
+                    .inspect_err(|e| panic!("fields_input parse error {:?}", e))?,
+            );
+
+            // Stop parsing fields if we've reached the end of input or a
+            // semicolon. This is identical to the loop condition, but we may
+            // have a trailing comma after this that we need to consume:
+            if fields_input.peek(Token![;]) || fields_input.is_empty() {
+                break;
+            }
+
+            // Explicitly parse and discard the separating or trailing comma:
+            let _comma: Token![,] = fields_input.parse()?;
+        }
+
         for field in fields.iter().rev() {
             match field.field_def {
                 FieldDef::Padding(None) => {
@@ -118,7 +144,28 @@ impl Parse for Value {
                 FieldDef::Padding(Some(_)) | FieldDef::Register { aliased: false, .. } => break,
             }
         }
-        Ok(Value::Block(fields))
+
+        let mut state_variables: Vec<StateVariable> = vec![];
+        let mut methods: Vec<ImplItemFn> = vec![];
+
+        if fields_input.peek(Token![;]) {
+            // Explicitly parse and discard the separating or trailing semicolon:
+            let _semicolon: Token![;] = fields_input.parse()?;
+
+            // Parse remaining extension items until the end of the braced block:
+            while !fields_input.is_empty() {
+                match fields_input.parse::<ExtensionItem>()? {
+                    ExtensionItem::State(s) => state_variables.push(s),
+                    ExtensionItem::Method(m) => methods.push(m),
+                }
+            }
+        }
+
+        Ok(Value::Block {
+            fields,
+            state_variables,
+            methods,
+        })
     }
 }
 
@@ -240,5 +287,30 @@ impl Parse for RegisterSpec {
             array_sizes,
             operations,
         })
+    }
+}
+
+impl Parse for StateVariable {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let name: Ident = input.parse()?;
+        let _colon: Token![:] = input.parse()?;
+        let ty: Type = input.parse()?;
+        let _eq: Token![=] = input.parse()?;
+        let init: Expr = input.parse()?;
+        let _semi: Token![;] = input.parse()?;
+
+        Ok(StateVariable { name, ty, init })
+    }
+}
+
+impl Parse for ExtensionItem {
+    fn parse(input: ParseStream) -> Result<Self> {
+        // Look ahead for method keywords to distinguish between state variables
+        // and methods. Handles `fn ...` or `pub fn ...`
+        if input.peek(Token![fn]) || (input.peek(Token![pub]) && input.peek2(Token![fn])) {
+            Ok(ExtensionItem::Method(input.parse()?))
+        } else {
+            Ok(ExtensionItem::State(input.parse()?))
+        }
     }
 }

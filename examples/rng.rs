@@ -3,19 +3,31 @@
 // Copyright Tock Contributors 2026.
 // Copyright Better Bytes 2026.
 
+use core::cell::RefCell;
 use tock_registers::{mmio32_registers, Read};
 
 mmio32_registers! {
-    /// Registers for a hardware device that generates random numbers.
     pub rng {
-        /// This register returns a new random value on every read.
-        0 => random_byte: u8 { Read },
+        0 => random_byte: u8 { Read };
+
+        // State stored in the generated register struct:
+        tx_dma_buf: RefCell<Option<&'static mut [u8]>> = RefCell::new(None);
+
+        // This describes both the trait method, and its implementation on the
+        // registers struct. A FakeRegisters struct would need to implement this
+        // manually and can't rely on the state being accessible:
+        pub fn start_tx_dma(&self, buf: &'static mut [u8]) {
+            let mut dma_buf = self.tx_dma_buf.borrow_mut();
+
+            assert!(dma_buf.is_none());
+            *dma_buf = Some(buf);
+        }
     }
 }
 
 /// A driver for this hardware, which fills the provided buffer with random
 /// data.
-pub fn getrandom<R: rng::Interface>(registers: R, buffer: &mut [u8]) {
+pub fn getrandom<R: rng::Interface>(registers: &R, buffer: &mut [u8]) {
     for byte in buffer {
         *byte = registers.random_byte().get();
     }
@@ -33,15 +45,21 @@ mod tests {
     #[derive(Default)]
     struct FakeRng {
         state: Cell<u8>,
+        // fake_dma_buf: RefCell<Option<&'static mut [u8]>> = RefCell::new(None);
     }
-    impl rng::Interface for &FakeRng {
-        type random_byte = FakeRegister<Self, u8, Safe, NoAccess>;
-        fn random_byte(self) -> FakeRegister<Self, u8, Safe, NoAccess> {
+    impl rng::Interface for FakeRng {
+        type random_byte<'a> = FakeRegister<&'a Self, u8, Safe, NoAccess>;
+
+        fn random_byte(&self) -> Self::random_byte<'_> {
             FakeRegister::new(self).on_read(|this| {
                 let next = this.state.get().wrapping_add(1);
                 this.state.set(next);
                 LocalRegisterCopy::new(next)
             })
+        }
+
+        fn start_tx_dma(&self, _buf: &'static mut [u8]) {
+            unimplemented!();
         }
     }
 

@@ -72,7 +72,17 @@ fn generate(input: Input) -> TokenStream {
             Value::Single(register) => {
                 single::generate(&input.tock_registers, &definition, register)
             }
-            Value::Block(fields) => block::generate(&input.tock_registers, &definition, fields),
+            Value::Block {
+                fields,
+                state_variables,
+                methods,
+            } => block::generate(
+                &input.tock_registers,
+                &definition,
+                fields,
+                state_variables,
+                methods,
+            ),
         });
     }
     out

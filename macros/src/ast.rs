@@ -6,7 +6,7 @@
 //! The Abstract Syntax Tree for a registers! invocation.
 
 use std::ops::Index;
-use syn::{Attribute, Ident, LitInt, Path, TypePath, Visibility};
+use syn::{Attribute, Expr, Ident, ImplItemFn, LitInt, Path, Type, TypePath, Visibility};
 
 /// Represents the full input to the registers! procedural macro. Note that
 /// `tock_registers::registers!` prepends `$crate` to the input provided by the user, so that the
@@ -98,7 +98,11 @@ pub struct Definition {
 /// }
 /// ```
 pub enum Value {
-    Block(Vec<Field>),
+    Block {
+        fields: Vec<Field>,
+        state_variables: Vec<StateVariable>,
+        methods: Vec<ImplItemFn>,
+    },
     Single(RegisterSpec),
 }
 
@@ -255,4 +259,16 @@ pub struct RegisterSpec {
     /// Operations, if this is a register definition. If this is a register reference, this will be
     /// None.
     pub operations: Option<Vec<Path>>,
+}
+
+#[derive(Debug)]
+pub struct StateVariable {
+    pub name: Ident,
+    pub ty: Type,
+    pub init: Expr,
+}
+
+pub enum ExtensionItem {
+    State(StateVariable),
+    Method(ImplItemFn),
 }

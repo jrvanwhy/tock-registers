@@ -51,7 +51,7 @@ pub unsafe trait Bus<T: UIntLike>: Address {
 /// An accessor for a block of registers. Every Real type implements this. This trait is used to
 /// construct the register blocks, including sub-blocks for larger register blocks and elements of
 /// arrays.
-pub trait Block: Copy {
+pub trait Block {
     type Address: Address;
     /// Size this blocks occupies in the address space. Depends on the address type.
     const SIZE: usize;
