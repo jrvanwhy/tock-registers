@@ -7,7 +7,8 @@
 //! each AST type shows that type's definition syntax.
 
 use crate::ast::{BusAttr, Field, FieldDef, Input, Layout, PerBusInt, RegisterSpec, Value};
-use syn::parse::{Parse, ParseStream};
+use proc_macro2::TokenStream;
+use syn::parse::{Parse, ParseBuffer, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::{Brace, Bracket};
@@ -126,7 +127,7 @@ impl Parse for Value {
         // Distinguish between a single register and block by looking at the first token, which
         // should be either : (single) or { (block).
         if input.peek(Token![:]) {
-            return input.parse().map(Value::Single);
+            return Outcome::to_result(input.parse()).map(Value::Single);
         }
         if !input.peek(Brace) {
             return Err(input.error("expected one of: `:`, `{`"));
@@ -216,7 +217,7 @@ impl Parse for FieldDef {
             docs: Vec::new(),
             aliased: false,
             name: input.parse()?,
-            spec: input.parse()?,
+            spec: Outcome::to_result(input.parse())?,
         })
     }
 }
@@ -236,36 +237,126 @@ impl Parse for PerBusInt {
     }
 }
 
-impl Parse for RegisterSpec {
-    fn parse(input: ParseStream) -> Result<RegisterSpec> {
+impl Parse for Outcome<RegisterSpec> {
+    fn parse(input: ParseStream) -> Result<Outcome<RegisterSpec>> {
         input.parse::<Token![:]>()?;
+        let out = Outcome::new();
         // Recursive function to parse the type specification (because syn makes it hard to consume
         // individual bracket tokens).
-        fn parse_type(input: ParseStream, array_sizes: &mut Vec<LitInt>) -> Result<Type> {
+        fn parse_type(input: ParseStream, array_sizes: &mut Vec<LitInt>) -> Result<Outcome<Type>> {
+            let out = Outcome::new();
             if !input.peek(Bracket) {
-                return input.parse();
+                return out.complete(input.parse()?);
             }
             let inner;
             bracketed!(inner in input);
-            let out = parse_type(&inner, array_sizes)?;
+            let inner_type = match parse_type(&inner, array_sizes) {
+                Ok(inner_type) = inner_type,
+                Err(err) => {
+                    consume_stream(inner);
+                    return 
+                },
+            };
             inner.parse::<Token![;]>()?;
             array_sizes.push(inner.parse()?);
             Ok(out)
         }
         let mut array_sizes = Vec::new();
-        let element_type = parse_type(input, &mut array_sizes)?;
+        let (mut out, element_type) = out.chain(parse_type(input, &mut array_sizes))?;
         let operations = if input.peek(Brace) {
             let ops;
             braced!(ops in input);
-            let ops = Punctuated::<_, Token![,]>::parse_terminated(&ops)?;
-            Some(ops.into_iter().collect())
+            Some(match Punctuated::<_, Token![,]>::parse_terminated(&ops) {
+                Ok(ops) => ops.into_iter().collect(),
+                Err(error) => {
+                    consume_stream(ops);
+                    out.continuable(error);
+                    Vec::new()
+                },
+            })
         } else {
             None
         };
-        Ok(RegisterSpec {
-            element_type,
-            array_sizes,
-            operations,
+        out.complete(RegisterSpec { element_type, array_sizes, operations })
+    }
+}
+
+/// `Result<T, Error>` only allows us to express two outcomes: perfect success, or immediate error.
+/// However, an immediate error is a pretty harsh outcome: it stops parsing, which prevents the
+/// macro from outputting more than one error at a time, and it prevents code generation, which
+/// will result in many "unknown module" errors from the code that depends on the generated module.
+/// Therefore, for any AST node with non-immediate errors, we parse into `Result<Outcome<T>,
+/// Error>` instead. Note that because `syn::parse::Parse` always returns `Result<Self>`, we still
+/// use `Result::Err` to communicate errors that should immediately stop parsing.
+pub enum Outcome<T> {
+    /// Full success (no errors).
+    Ok(T),
+    /// An error that does not stop parsing or code generation.
+    Continue(T, Error),
+}
+
+impl Outcome<()> {
+    /// Constructs a new Outcome with empty contents.
+    ///
+    /// Generally, parse functions will construct an empty Outcome at their start. As they
+    /// encounter errors, they will use the modifier functions to add those errors to the Outcome.
+    /// At the end, they will then call [`complete`] to attach the AST node to the Outcome before
+    /// returning it.
+    fn new() -> Outcome<()> { Outcome::Ok(()) }
+
+    /// Combines this Outcome with the results of parsing a sub-node. This does not recover from
+    /// errors: if the sub-node parse hard-errored then this will return Err().
+    fn chain<T>(self, result: Result<Outcome<T>>) -> Result<(Outcome<()>, T)> {
+        match (self, result) {
+            (s, Ok(Outcome::Ok(val))) => Ok((s, val)),
+            (Outcome::Ok(_), Ok(Outcome::Continue(val, err))) => Ok((Outcome::Continue((), err), val)),
+            (Outcome::Ok(_), Err(err)) => Err(err),
+            (Outcome::Continue(_, mut err), Ok(Outcome::Continue(val, err2))) => {
+                err.combine(err2);
+                Ok((Outcome::Continue((), err), val))
+            },
+            (Outcome::Continue(_, mut err), Err(err2)) => {
+                err.combine(err2);
+                Err(err)
+            },
+        }
+    }
+
+    /// Attaches an error that allows for parsing and code generation to continue (i.e. one that is
+    /// very recoverable).
+    fn continuable(&mut self, error: Error) {
+        match self {
+            Outcome::Ok(()) => *self = Outcome::Continue((), error),
+            Outcome::Continue((), ref mut self_error) => self_error.combine(error),
+        }
+    }
+
+    /// Attaches new data to the Outcome and returns the new Outcome wrappen in a [`syn::Result`].
+    /// Used at the end of [`Parse`] implementations.
+    fn complete<T>(self, value: T) -> Result<Outcome<T>> {
+        Ok(match self {
+            Outcome::Ok(()) => Outcome::Ok(value),
+            Outcome::Continue((), error) => Outcome::Continue(value, error),
         })
     }
+}
+
+// TODO: Remove to_result
+impl<T> Outcome<T> {
+    fn to_result(this: Result<Self>) -> Result<T> {
+        match this? {
+            Outcome::Ok(val) => Ok(val),
+            Outcome::Continue(_, error) => Err(error),
+        }
+    }
+}
+
+/// If a ParseStream is created but only partially consumed, `syn` automatically generates an
+/// "unexpected token" error. However, we occasionally parse the contents of delimiters and recover
+/// from any errors encountered. This function consumes the remainder of the ParseStream,
+/// preventing the "unexpected token" error from being emitted.
+// TODO: Verify this is necessary... I think it is if the overall parse succeeds.
+fn consume_stream(stream: ParseBuffer) {
+    // Parsing a TokenStream should be infallible.
+    let _: TokenStream = stream.parse().unwrap();
 }
