@@ -13,14 +13,77 @@ use syn::spanned::Spanned;
 use syn::token::{Brace, Bracket};
 use syn::{braced, bracketed, AttrStyle, Attribute, Error, LitInt, Meta, Result, Token, Type};
 
-impl Parse for Input {
-    fn parse(input: ParseStream) -> Result<Input> {
+/// `Result<T, Error>` only allows us to express two outcomes: perfect success, or immediate error.
+/// However, an immediate error is a pretty harsh outcome: it stops parsing, which prevents the
+/// macro from outputting more than one error at a time, and it prevents code generation, which
+/// will result in many "unknown module" errors from the code that depends on the generated module.
+/// Therefore, for any AST node with non-immediate errors, we parse into `Result<Outcome<T>,
+/// Error>` instead. Note that because `syn::parse::Parse` always returns `Result<Self>`, we still
+/// use `Result::Err` to communicate errors that should immediately stop parsing.
+pub enum Outcome<T> {
+    /// Full success (no errors)
+    Ok(T),
+    /// An error that does not stop parsing or code generation.
+    Continue(T, Error),
+    /// An error that stops code generation but not parsing.
+    NoGenerate(Error),
+}
+
+impl Outcome<()> {
+    /// Constructs a new Outcome with empty contents.
+    ///
+    /// Generally, parse functions will construct an empty Outcome at their start. As they
+    /// encounter errors, they will use the modifier functions to add those errors to the Outcome.
+    /// At the end, they will then call [`complete`] to attach the AST node to the Outcome before
+    /// returning it.
+    fn new() -> Outcome<()> { Outcome::Ok(()) }
+
+    /// Combines this Outcome with the results of parsing a sub-node. This does not recover from
+    /// errors: if the sub-node parse hard-errored then this will return Err().
+    fn chain<T>(self, result: Result<Outcome<T>>) -> Result<(Outcome<()>, Option<T>)> {
+        use Outcome::{Continue, NoGenerate};
+        match (self, result) {
+            (s, Ok(Outcome::Ok(val))) => Ok((s, Some(val))),
+            (Outcome::Ok(_), Ok(Continue(val, err))) => Ok((Continue((), err), Some(val))),
+            (Continue(_, ref mut err) | NoGenerate(ref mut err), Ok(Continue(val, err2))) => {
+                err.combine(err2);
+                Ok((self, Some(val)))
+            },
+            (Outcome::Ok(_), Ok(NoGenerate(err))) => Ok((NoGenerate(err), None)),
+            (Continue(_, mut err) | NoGenerate(mut err), Ok(NoGenerate(err2))) => {
+                err.combine(err2);
+                Ok((NoGenerate(err), None))
+            },
+            (Outcome::Ok(_), Err(err)) => Err(err),
+            (Outcome::Continue(_, mut err) | NoGenerate(mut err), Err(err2)) => {
+                err.combine(err2);
+                Err(err)
+            },
+        }
+    }
+
+    /// Attaches new data to the Outcome and returns the new Outcome wrapped in a [`syn::Result`].
+    /// Used at the end of [`Parse`] implementations.
+    fn complete<T>(self, value: T) -> Result<Outcome<T>> {
+        Ok(match self {
+            Outcome::Ok(()) => Outcome::Ok(value),
+            Outcome::Continue((), err) => Outcome::Continue(value, err),
+            Outcome::NoGenerate(err) => Outcome::NoGenerate(err),
+        })
+    }
+}
+
+impl Parse for Outcome<Input> {
+    fn parse(input: ParseStream) -> Result<Outcome<Input>> {
+        let mut out = Outcome::new();
         let tock_registers = input.parse()?;
         // Parse attributes that apply to all layouts.
         let (docs, bus) = layout_attributes(Attribute::parse_inner(input)?)?;
-        let punctuated = Punctuated::<Layout, Token![,]>::parse_terminated(input)?;
+        let punctuated = Punctuated::<Outcome<Layout>, Token![,]>::parse_terminated(input)?;
         let mut layouts = Vec::with_capacity(punctuated.len());
-        for mut layout in punctuated {
+        for layout in punctuated {
+            let (out, layout) = out.chain(layout)?;
+            let Some(layout) = layout else { continue };
             // Prepend the global (inner attribute) docs to each Layout's local (outer attribute)
             // docs).
             layout.docs = docs.iter().cloned().chain(layout.docs).collect();
@@ -63,17 +126,18 @@ impl Parse for Input {
             }
             layouts.push(layout);
         }
-        Ok(Input {
+        out.complete(Input {
             tock_registers,
             layouts,
         })
     }
 }
 
-impl Parse for Layout {
-    fn parse(input: ParseStream) -> Result<Layout> {
+impl Parse for Outcome<Layout> {
+    fn parse(input: ParseStream) -> Result<Outcome<Layout>> {
+        let out = Outcome::new();
         let (docs, bus) = layout_attributes(Attribute::parse_outer(input)?)?;
-        Ok(Layout {
+        out.complete(Layout {
             docs,
             bus,
             visibility: input.parse()?,

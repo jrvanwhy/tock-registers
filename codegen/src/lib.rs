@@ -35,10 +35,11 @@ mod single_test_scalar;
 mod test_util;
 
 use ast::{Input, RegisterSpec, Value};
+use parse::Outcome;
 use proc_macro2::TokenStream;
 use quote::quote;
 use std::mem::replace;
-use syn::{parse2, Ident, Path, PathArguments};
+use syn::{parse2, Error, Ident, Path, PathArguments};
 
 /// Returns the generated code for a `tock_registers_macro::register_layouts!` invocation.
 ///
@@ -53,15 +54,22 @@ use syn::{parse2, Ident, Path, PathArguments};
 /// error.
 pub fn register_layouts(input: TokenStream, env: Env) -> Result<TokenStream, TokenStream> {
     use Value::{Block, Single};
-    let input: Input = parse2(input).map_err(|e| e.to_compile_error())?;
-    let mut out = TokenStream::new();
+    let (input, success, error) = match parse2(input) {
+        Ok(Outcome::Ok(input)) => (input, true, None),
+        Ok(Outcome::Continue(input, err)) => (input, false, Some(err)),
+        Ok(Outcome::NoGenerate(err)) | Err(err) => return Err(err.into_compile_error()),
+    };
+    let mut out = error.map(Error::into_compile_error).unwrap_or_default();
     for layout in input.layouts {
         out.extend(match &layout.value {
             Block(fields) => block::generate(env, &input.tock_registers, &layout, fields),
             Single(register) => single::generate(env, &input.tock_registers, &layout, register),
         });
     }
-    Ok(out)
+    match success {
+        true => Ok(out),
+        false => Err(out),
+    }
 }
 
 /// register_layouts generates slightly different code (in particular, different `#![allow()]`
