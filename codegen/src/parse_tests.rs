@@ -4,6 +4,7 @@
 // Copyright Better Bytes 2026.
 
 use crate::ast::{Field, FieldDef, Input, PerBusInt, RegisterSpec};
+use crate::parse_outcome::Outcome;
 use quote::quote;
 use syn::{parse2, parse_quote, Type};
 
@@ -12,7 +13,7 @@ use syn::{parse2, parse_quote, Type};
 fn bus() {
     use crate::ast::BusAttr::{Bus, Buses};
 
-    let error = parse2::<Input>(quote![::tock_registers b: a]).unwrap_err();
+    let error = parse2::<Outcome<Input>>(quote![::tock_registers b: a]).unwrap_err();
     assert!(error.to_string().contains("no bus specified"));
 
     // Shortcuts so the assert_eq!() calls don't line-wrap.
@@ -20,56 +21,62 @@ fn bus() {
     let mmio64 = || parse_quote![Mmio64];
     let mmio32null = || parse_quote![Mmio32Nullable];
 
-    let input: Input = parse_quote! {
+    let input: Outcome<Input> = parse_quote! {
         ::tock_registers
         #[bus(Mmio32)] a: r,
         #[buses(Mmio32)] b: r,
         #[buses(Mmio32, Mmio64)] c: r,
     };
+    let input = input.unwrap();
     assert_eq!(input.layouts[0].bus, Bus(mmio32()));
     assert_eq!(input.layouts[1].bus, Buses(vec![mmio32()]));
     assert_eq!(input.layouts[2].bus, Buses(vec![mmio32(), mmio64()]));
 
-    let input: Input = parse_quote! {
+    let input: Outcome<Input> = parse_quote! {
         ::tock_registers #![bus(Mmio32)]
         a: r,
         #[bus(Mmio64)] b: r,
         #[buses(Mmio64)] c: r,
         #[buses(Mmio32Nullable, Mmio64)] d: r,
     };
+    let input = input.unwrap();
     assert_eq!(input.layouts[0].bus, Bus(mmio32()));
     assert_eq!(input.layouts[1].bus, Bus(mmio64()));
     assert_eq!(input.layouts[2].bus, Buses(vec![mmio64()]));
     assert_eq!(input.layouts[3].bus, Buses(vec![mmio32null(), mmio64()]));
 
-    let input: Input = parse_quote! {
+    let input: Outcome<Input> = parse_quote! {
         ::tock_registers #![buses(Mmio32)]
         a: r,
         #[bus(Mmio64)] b: r,
         #[buses(Mmio64)] c: r,
         #[buses(Mmio32Nullable, Mmio64)] d: r,
     };
+    let input = input.unwrap();
     assert_eq!(input.layouts[0].bus, Buses(vec![mmio32()]));
     assert_eq!(input.layouts[1].bus, Bus(mmio64()));
     assert_eq!(input.layouts[2].bus, Buses(vec![mmio64()]));
     assert_eq!(input.layouts[3].bus, Buses(vec![mmio32null(), mmio64()]));
 
-    let input: Input = parse_quote! {
+    let input: Outcome<Input> = parse_quote! {
         ::tock_registers #![buses(Mmio32, Mmio32Nullable)]
         a: r,
         #[bus(Mmio64)] b: r,
         #[buses(Mmio64)] c: r,
         #[buses(Mmio32Nullable, Mmio64)] d: r,
     };
+    let input = input.unwrap();
     assert_eq!(input.layouts[0].bus, Buses(vec![mmio32(), mmio32null()]));
     assert_eq!(input.layouts[1].bus, Bus(mmio64()));
     assert_eq!(input.layouts[2].bus, Buses(vec![mmio64()]));
     assert_eq!(input.layouts[3].bus, Buses(vec![mmio32null(), mmio64()]));
 
-    let error = parse2::<Input>(quote![::tock_registers #![bus(A)] #![buses(B)] b: a]).unwrap_err();
+    let error = parse2::<Outcome<Input>>(quote![::tock_registers #![bus(A)] #![buses(B)] b: a])
+        .unwrap_err();
     assert!(error.to_string().contains("multiple bus attributes"));
 
-    let error = parse2::<Input>(quote![::tock_registers #[buses(A)] #[bus(B)] b: a]).unwrap_err();
+    let error =
+        parse2::<Outcome<Input>>(quote![::tock_registers #[buses(A)] #[bus(B)] b: a]).unwrap_err();
     assert!(error.to_string().contains("multiple bus attributes"));
 }
 
@@ -77,16 +84,18 @@ fn bus() {
 // of sizes for padding does not match the number of buses for that layout.
 #[test]
 fn bus_count_mismatches() {
-    let error =
-        parse2::<Input>(quote![::tock_registers #[bus(Port)] a { [0, 1] => a: u8 { Read } } ])
-            .unwrap_err()
-            .to_string();
+    let error = parse2::<Outcome<Input>>(quote! {
+        ::tock_registers #[bus(Port)] a { [0, 1] => a: u8 { Read } }
+    })
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("number of offsets (2) does not match number of buses (1)"));
 
-    let error =
-        parse2::<Input>(quote![::tock_registers #![buses(Mmio32, Port)] a { 0 => _: [1] } ])
-            .unwrap_err()
-            .to_string();
+    let error = parse2::<Outcome<Input>>(quote! {
+        ::tock_registers #![buses(Mmio32, Port)] a { 0 => _: [1] }
+    })
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("number of sizes (1) does not match number of buses (2)"));
 }
 

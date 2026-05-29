@@ -22,6 +22,7 @@ mod block_test_empty;
 #[cfg(all(test, not(miri)))]
 mod block_test_offsets;
 mod parse;
+mod parse_outcome;
 #[cfg(all(test, not(miri)))]
 mod parse_tests;
 mod single;
@@ -34,7 +35,8 @@ mod single_test_scalar;
 #[cfg(all(test, not(miri)))]
 mod test_util;
 
-use ast::{Input, RegisterSpec, Value};
+use ast::{RegisterSpec, Value};
+use parse_outcome::Outcome;
 use proc_macro2::TokenStream;
 use quote::quote;
 use std::mem::replace;
@@ -53,15 +55,21 @@ use syn::{parse2, Ident, Path, PathArguments};
 /// error.
 pub fn register_map(input: TokenStream, env: Env) -> Result<TokenStream, TokenStream> {
     use Value::{Block, Single};
-    let input: Input = parse2(input).map_err(|e| e.to_compile_error())?;
-    let mut out = TokenStream::new();
+    let (input, mut out, successful) = match parse2(input) {
+        Ok(Outcome::Ok(input)) => (input, TokenStream::new(), true),
+        Ok(Outcome::Continue(input, err)) => (input, err.into_compile_error(), false),
+        Err(err) | Ok(Outcome::NoGenerate(err)) => return Err(err.into_compile_error()),
+    };
     for layout in input.layouts {
         out.extend(match &layout.value {
             Block(fields) => block::generate(env, &input.tock_registers, &layout, fields),
             Single(register) => single::generate(env, &input.tock_registers, &layout, register),
         });
     }
-    Ok(out)
+    match successful {
+        true => Ok(out),
+        false => Err(out),
+    }
 }
 
 /// register_map generates slightly different code (in particular, different `#![allow()]`

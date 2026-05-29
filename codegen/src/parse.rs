@@ -7,15 +7,17 @@
 //! each AST type shows that type's definition syntax.
 
 use crate::ast::{BusAttr, Field, FieldDef, Input, Layout, PerBusInt, RegisterSpec, Value};
+use crate::parse_outcome::Outcome;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::{Brace, Bracket};
 use syn::{braced, bracketed, AttrStyle, Attribute, Error, LitInt, Meta, Result, Token, Type};
 
-impl Parse for Input {
-    fn parse(input: ParseStream) -> Result<Input> {
+impl Parse for Outcome<Input> {
+    fn parse(input: ParseStream) -> Result<Outcome<Input>> {
         let tock_registers = input.parse()?;
+        let out = Outcome::new();
         // Parse attributes that apply to all layouts.
         let (docs, bus) = layout_attributes(Attribute::parse_inner(input)?)?;
         let punctuated = Punctuated::<Layout, Token![,]>::parse_terminated(input)?;
@@ -63,7 +65,7 @@ impl Parse for Input {
             }
             layouts.push(layout);
         }
-        Ok(Input {
+        out.success(Input {
             tock_registers,
             layouts,
         })

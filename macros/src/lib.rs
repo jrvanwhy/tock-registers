@@ -6,7 +6,8 @@
 // TODO: Figure out if we're merging this into the default branch or into a separate feature
 //       branch.
 // TODO: Determine how to split this into PRs.
-// TODO: Figure out tock-registers version numbering (interacts with deprecation strategy).
+// TODO: Figure out tock-registers version numbering (interacts with deprecation strategy). Label
+//       register_structs! as deprecated in the appropriate manner.
 // TODO: Update the top-level crate doc comment. It should probably match or be similar to
 //       the README.
 // TODO: Improve parse error handling. There might be three classes of errors:
