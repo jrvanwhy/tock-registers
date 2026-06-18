@@ -84,6 +84,7 @@ pub mod macros;
 #[cfg(feature = "register_types")]
 pub mod registers;
 
+use core::arch::asm;
 use core::fmt::Debug;
 use core::ops::{BitAnd, BitOr, BitOrAssign, Not, Shl, Shr};
 
@@ -132,6 +133,67 @@ UIntLike_impl_for!(u32);
 UIntLike_impl_for!(u64);
 UIntLike_impl_for!(u128);
 UIntLike_impl_for!(usize);
+
+pub trait Volatile: UIntLike {
+    unsafe fn read_volatile(src: *const Self) -> Self;
+    unsafe fn write_volatile(dst: *mut Self, src: Self);
+}
+
+#[cfg(target_arch = "riscv32")]
+impl Volatile for u8 {
+    unsafe fn read_volatile(src: *const Self) -> Self {
+        let dst;
+        unsafe { asm!("lb {d}, 0({s})", d = lateout(reg) dst, s = in(reg) src, options(preserves_flags,nostack)) }
+        dst
+    }
+    unsafe fn write_volatile(dst: *mut Self, src: Self) { unsafe { asm!("sb {s}, 0({d})", s = in(reg) src, d = in(reg) dst, options(preserves_flags,nostack)) } }
+}
+#[cfg(target_arch = "riscv32")]
+impl Volatile for u16 {
+    unsafe fn read_volatile(src: *const Self) -> Self {
+        let dst;
+        unsafe { asm!("lh {d}, 0({s})", d = lateout(reg) dst, s = in(reg) src, options(preserves_flags,nostack)) }
+        dst
+    }
+    unsafe fn write_volatile(dst: *mut Self, src: Self) { unsafe { asm!("sh {s}, 0({d})", s = in(reg) src, d = in(reg) dst, options(preserves_flags,nostack)) } }
+}
+#[cfg(target_arch = "riscv32")]
+impl Volatile for u32 {
+    unsafe fn read_volatile(src: *const Self) -> Self {
+        let dst;
+        unsafe { asm!("lw {d}, 0({s})", d = lateout(reg) dst, s = in(reg) src, options(preserves_flags,nostack)) }
+        dst
+    }
+    unsafe fn write_volatile(dst: *mut Self, src: Self) { unsafe { asm!("sw {s}, 0({d})", s = in(reg) src, d = in(reg) dst, options(preserves_flags,nostack)) } }
+}
+
+#[cfg(target_arch = "arm")]
+impl Volatile for u8 {
+    unsafe fn read_volatile(src: *const Self) -> Self {
+        let dst;
+        unsafe { asm!("ldrb {d}, [{s}, #0]", d = lateout(reg) dst, s = in(reg) src, options(preserves_flags,nostack)) }
+        dst
+    }
+    unsafe fn write_volatile(dst: *mut Self, src: Self) { unsafe { asm!("strb {s}, [{d}, #0]", s = in(reg) src, d = in(reg) dst, options(preserves_flags,nostack)) } }
+}
+#[cfg(target_arch = "arm")]
+impl Volatile for u16 {
+    unsafe fn read_volatile(src: *const Self) -> Self {
+        let dst;
+        unsafe { asm!("ldrh {d}, [{s}, #0]", d = lateout(reg) dst, s = in(reg) src, options(preserves_flags,nostack)) }
+        dst
+    }
+    unsafe fn write_volatile(dst: *mut Self, src: Self) { unsafe { asm!("strh {s}, [{d}, #0]", s = in(reg) src, d = in(reg) dst, options(preserves_flags,nostack)) } }
+}
+#[cfg(target_arch = "arm")]
+impl Volatile for u32 {
+    unsafe fn read_volatile(src: *const Self) -> Self {
+        let dst;
+        unsafe { asm!("ldr {d}, [{s}, #0]", d = lateout(reg) dst, s = in(reg) src, options(preserves_flags,nostack)) }
+        dst
+    }
+    unsafe fn write_volatile(dst: *mut Self, src: Self) { unsafe { asm!("str {s}, [{d}, #0]", s = in(reg) src, d = in(reg) dst, options(preserves_flags,nostack)) } }
+}
 
 /// Descriptive name for each register.
 pub trait RegisterLongName {}

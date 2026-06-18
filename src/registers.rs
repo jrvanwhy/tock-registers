@@ -45,22 +45,22 @@ pub struct ReadWrite<T: UIntLike, R: RegisterLongName = ()> {
     value: UnsafeCell<T>,
     associated_register: PhantomData<R>,
 }
-impl<T: UIntLike, R: RegisterLongName> Readable for ReadWrite<T, R> {
+impl<T: crate::Volatile, R: RegisterLongName> Readable for ReadWrite<T, R> {
     type T = T;
     type R = R;
 
     #[inline]
     fn get(&self) -> Self::T {
-        unsafe { ::core::ptr::read_volatile(self.value.get()) }
+        unsafe { <T as crate::Volatile>::read_volatile(self.value.get()) }
     }
 }
-impl<T: UIntLike, R: RegisterLongName> Writeable for ReadWrite<T, R> {
+impl<T: crate::Volatile, R: RegisterLongName> Writeable for ReadWrite<T, R> {
     type T = T;
     type R = R;
 
     #[inline]
     fn set(&self, value: T) {
-        unsafe { ::core::ptr::write_volatile(self.value.get(), value) }
+        unsafe { <T as crate::Volatile>::write_volatile(self.value.get(), value) }
     }
 }
 
@@ -82,13 +82,13 @@ pub struct ReadOnly<T: UIntLike, R: RegisterLongName = ()> {
     value: T,
     associated_register: PhantomData<R>,
 }
-impl<T: UIntLike, R: RegisterLongName> Readable for ReadOnly<T, R> {
+impl<T: crate::Volatile, R: RegisterLongName> Readable for ReadOnly<T, R> {
     type T = T;
     type R = R;
 
     #[inline]
     fn get(&self) -> T {
-        unsafe { ::core::ptr::read_volatile(&self.value) }
+        unsafe { <T as crate::Volatile>::read_volatile(&self.value) }
     }
 }
 
@@ -110,13 +110,13 @@ pub struct WriteOnly<T: UIntLike, R: RegisterLongName = ()> {
     value: UnsafeCell<T>,
     associated_register: PhantomData<R>,
 }
-impl<T: UIntLike, R: RegisterLongName> Writeable for WriteOnly<T, R> {
+impl<T: crate::Volatile, R: RegisterLongName> Writeable for WriteOnly<T, R> {
     type T = T;
     type R = R;
 
     #[inline]
     fn set(&self, value: T) {
-        unsafe { ::core::ptr::write_volatile(self.value.get(), value) }
+        unsafe { <T as crate::Volatile>::write_volatile(self.value.get(), value) }
     }
 }
 
@@ -146,22 +146,22 @@ pub struct Aliased<T: UIntLike, R: RegisterLongName = (), W: RegisterLongName = 
     value: UnsafeCell<T>,
     associated_register: PhantomData<(R, W)>,
 }
-impl<T: UIntLike, R: RegisterLongName, W: RegisterLongName> Readable for Aliased<T, R, W> {
+impl<T: crate::Volatile, R: RegisterLongName, W: RegisterLongName> Readable for Aliased<T, R, W> {
     type T = T;
     type R = R;
 
     #[inline]
     fn get(&self) -> Self::T {
-        unsafe { ::core::ptr::read_volatile(self.value.get()) }
+        unsafe { <T as crate::Volatile>::read_volatile(self.value.get()) }
     }
 }
-impl<T: UIntLike, R: RegisterLongName, W: RegisterLongName> Writeable for Aliased<T, R, W> {
+impl<T: crate::Volatile, R: RegisterLongName, W: RegisterLongName> Writeable for Aliased<T, R, W> {
     type T = T;
     type R = W;
 
     #[inline]
     fn set(&self, value: Self::T) {
-        unsafe { ::core::ptr::write_volatile(self.value.get(), value) }
+        unsafe { <T as crate::Volatile>::write_volatile(self.value.get(), value) }
     }
 }
 
