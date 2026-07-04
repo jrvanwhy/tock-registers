@@ -38,6 +38,7 @@ pub fn generate(env: Env, tock_registers: &Path, layout: &Layout, fields: &[Fiel
     let name = &layout.name;
     let interface_comment = interface_doc_comment();
     let mut interface_fields = TokenStream::new();
+    let mut deref_impl_items = TokenStream::new();
     let mut len_definitions = TokenStream::new();
     let bus_comment = bus_doc_comment();
     let mut bus_bounds = TokenStream::new();
@@ -144,6 +145,10 @@ pub fn generate(env: Env, tock_registers: &Path, layout: &Layout, fields: &[Fiel
             type #name: #interface_bound;
             #(#docs)* fn #name(&self) -> Self::#name;
         });
+        deref_impl_items.extend(quote! {
+            type #name = <T::Target as Interface>::#name;
+            fn #name(self) -> Self::#name { (**self).#name() }
+        });
         let name_offset = format_ident!("{name}_offset");
         // match that handles the difference between scalar offset definitions and array offset
         // definitions (moves the value of the name_offset fields between the Bus trait definition
@@ -202,6 +207,8 @@ pub fn generate(env: Env, tock_registers: &Path, layout: &Layout, fields: &[Fiel
             #interface_comment pub trait Interface: #tock_registers::internal::core::clone::Clone {
                 #interface_fields
             }
+            impl<T: #tock_registers::internal::core::ops::Deref<Target: Interface>>
+                Interface for &T { #deref_impl_items }
             pub mod lens { #len_definitions }
             #bus_comment #[allow(clippy::trait_duplication_in_bounds)]
             pub trait Bus: #tock_registers::Address #bus_bounds + sealed::Bus {
