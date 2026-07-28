@@ -44,17 +44,17 @@ fn offsets() {
         pub mod foo {
             #![allow(non_camel_case_types)]
             use super::*;
-            #interface_comment pub trait Interface: ::tock_registers::internal::core::marker::Copy {
+            #interface_comment pub trait Interface: ::tock_registers::internal::core::clone::Clone {
                 type variable_size: ::tock_registers::Register<DataType = usize> + Read;
-                fn variable_size(self) -> Self::variable_size;
+                fn variable_size(&self) -> Self::variable_size;
                 type size_variable_pos: ::tock_registers::Register<DataType = u32> + Read;
-                fn size_variable_pos(self) -> Self::size_variable_pos;
+                fn size_variable_pos(&self) -> Self::size_variable_pos;
                 type aliased: ::tock_registers::Register<DataType = u16> + Read;
-                fn aliased(self) -> Self::aliased;
+                fn aliased(&self) -> Self::aliased;
                 type fixed_pos: ::tock_registers::Register<DataType = u32> + Read;
-                fn fixed_pos(self) -> Self::fixed_pos;
+                fn fixed_pos(&self) -> Self::fixed_pos;
                 type padded_pos: ::tock_registers::Register<DataType = u8> + Read;
-                fn padded_pos(self) -> Self::padded_pos;
+                fn padded_pos(&self) -> Self::padded_pos;
             }
             pub mod lens {}
             #bus_comment #[allow(clippy::trait_duplication_in_bounds)]
@@ -141,31 +141,31 @@ fn offsets() {
                 real_padded_pos<B>: ::tock_registers::Register<DataType = u8> + Read,
             {
                 type variable_size = real_variable_size<B>;
-                fn variable_size(self) -> Self::variable_size {
+                fn variable_size(&self) -> Self::variable_size {
                     unsafe {
                         Self::variable_size::new(
                             self.address.byte_add(<B as Bus>::variable_size_offset))
                     }
                 }
                 type size_variable_pos = real_size_variable_pos<B>;
-                fn size_variable_pos(self) -> Self::size_variable_pos {
+                fn size_variable_pos(&self) -> Self::size_variable_pos {
                     unsafe {
                         Self::size_variable_pos::new(
                             self.address.byte_add(<B as Bus>::size_variable_pos_offset))
                     }
                 }
                 type aliased = real_aliased<B>;
-                fn aliased(self) -> Self::aliased {
+                fn aliased(&self) -> Self::aliased {
                     unsafe { Self::aliased::new(self.address.byte_add(<B as Bus>::aliased_offset)) }
                 }
                 type fixed_pos = real_fixed_pos<B>;
-                fn fixed_pos(self) -> Self::fixed_pos {
+                fn fixed_pos(&self) -> Self::fixed_pos {
                     unsafe {
                         Self::fixed_pos::new(self.address.byte_add(<B as Bus>::fixed_pos_offset))
                     }
                 }
                 type padded_pos = real_padded_pos<B>;
-                fn padded_pos(self) -> Self::padded_pos {
+                fn padded_pos(&self) -> Self::padded_pos {
                     unsafe {
                         Self::padded_pos::new(self.address.byte_add(<B as Bus>::padded_pos_offset))
                     }

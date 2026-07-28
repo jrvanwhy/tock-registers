@@ -23,7 +23,7 @@ fn empty() {
         pub mod foo {
             #![allow(non_camel_case_types,dead_code,non_upper_case_globals)] use super::*;
             #interface_comment
-            pub trait Interface: ::tock_registers::internal::core::marker::Copy {}
+            pub trait Interface: ::tock_registers::internal::core::clone::Clone {}
             pub mod lens {}
             #bus_comment #[allow(clippy::trait_duplication_in_bounds)]
             pub trait Bus: ::tock_registers::Address + sealed::Bus {

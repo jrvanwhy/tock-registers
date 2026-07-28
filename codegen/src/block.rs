@@ -142,7 +142,7 @@ pub fn generate(env: Env, tock_registers: &Path, layout: &Layout, fields: &[Fiel
         }
         interface_fields.extend(quote! {
             type #name: #interface_bound;
-            #(#docs)* fn #name(self) -> Self::#name;
+            #(#docs)* fn #name(&self) -> Self::#name;
         });
         let name_offset = format_ident!("{name}_offset");
         // match that handles the difference between scalar offset definitions and array offset
@@ -176,7 +176,7 @@ pub fn generate(env: Env, tock_registers: &Path, layout: &Layout, fields: &[Fiel
         }
         interface_impl_items.extend(quote! {
             type #name = #real;
-            fn #name(self) -> Self::#name {
+            fn #name(&self) -> Self::#name {
                 // Safety (see crate::new_doc_comment() for requirements):
                 // 1. When Self::new was called to construct `self`, the caller guaranteed that the
                 //    passed address points to registers on the bus of type B.
@@ -199,7 +199,7 @@ pub fn generate(env: Env, tock_registers: &Path, layout: &Layout, fields: &[Fiel
         #(#docs)*
         #visibility mod #name {
             #![allow(non_camel_case_types #env_allows)] use super::*;
-            #interface_comment pub trait Interface: #tock_registers::internal::core::marker::Copy {
+            #interface_comment pub trait Interface: #tock_registers::internal::core::clone::Clone {
                 #interface_fields
             }
             pub mod lens { #len_definitions }

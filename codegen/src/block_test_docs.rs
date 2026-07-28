@@ -49,28 +49,28 @@ fn doc_comments() {
             use super::*;
             /// Trait representing this register block. Driver code can use this trait to work with
             /// both real hardware and fake implementations of the peripheral (for unit testing).
-            pub trait Interface: ::tock_registers::internal::core::marker::Copy {
+            pub trait Interface: ::tock_registers::internal::core::clone::Clone {
                 type scalar_definition: ::tock_registers::Register<DataType = u8> + Read + Write;
                 /// Doc comment G
                 /// Doc comment H
-                fn scalar_definition(self) -> Self::scalar_definition;
+                fn scalar_definition(&self) -> Self::scalar_definition;
                 type array_definition: ::tock_registers::RegisterArray<
                     lens::array_definition<1usize>, Element:
                         ::tock_registers::RegisterArray<lens::array_definition<0usize>, Element:
                             ::tock_registers::Register<DataType = u8> + Read + Write> >;
                 /// Doc comment I
                 /// Doc comment J
-                fn array_definition(self) -> Self::array_definition;
+                fn array_definition(&self) -> Self::array_definition;
                 type scalar_reference: a::Interface;
                 /// Doc comment K
                 /// Doc comment L
-                fn scalar_reference(self) -> Self::scalar_reference;
+                fn scalar_reference(&self) -> Self::scalar_reference;
                 type array_reference: ::tock_registers::RegisterArray<
                     lens::array_reference<1usize>, Element: ::tock_registers::RegisterArray<
                         lens::array_reference<0usize>, Element: b::Interface> >;
                 /// Doc comment M
                 /// Doc comment N
-                fn array_reference(self) -> Self::array_reference;
+                fn array_reference(&self) -> Self::array_reference;
             }
             pub mod lens {
                 pub enum array_definition<const N: usize> {}
@@ -164,7 +164,7 @@ fn doc_comments() {
                 b::Real<B>: b::Interface,
             {
                 type scalar_definition = real_scalar_definition<B>;
-                fn scalar_definition(self) -> Self::scalar_definition {
+                fn scalar_definition(&self) -> Self::scalar_definition {
                     unsafe {
                         Self::scalar_definition::new(
                             self.address.byte_add(<B as Bus>::scalar_definition_offset))
@@ -173,14 +173,14 @@ fn doc_comments() {
                 type array_definition = ::tock_registers::RealRegisterArray<
                     ::tock_registers::RealRegisterArray<real_array_definition<B>,
                     lens::array_definition<0usize> >, lens::array_definition<1usize> >;
-                fn array_definition(self) -> Self::array_definition {
+                fn array_definition(&self) -> Self::array_definition {
                     unsafe {
                         Self::array_definition::new(
                             self.address.byte_add(<B as Bus>::array_definition_offset))
                     }
                 }
                 type scalar_reference = a::Real<B>;
-                fn scalar_reference(self) -> Self::scalar_reference {
+                fn scalar_reference(&self) -> Self::scalar_reference {
                     unsafe {
                         Self::scalar_reference::new(
                             self.address.byte_add(<B as Bus>::scalar_reference_offset))
@@ -189,7 +189,7 @@ fn doc_comments() {
                 type array_reference = ::tock_registers::RealRegisterArray<
                     ::tock_registers::RealRegisterArray<b::Real<B>, lens::array_reference<0usize>
                     >, lens::array_reference<1usize> >;
-                fn array_reference(self) -> Self::array_reference {
+                fn array_reference(&self) -> Self::array_reference {
                     unsafe {
                         Self::array_reference::new(
                             self.address.byte_add(<B as Bus>::array_reference_offset))

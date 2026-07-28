@@ -27,8 +27,8 @@ use core::marker::PhantomData;
 /// // especially when a peripheral has many registers.
 /// impl rng::Interface for &FakeRng {
 ///     type random_byte = FakeRegister<Self, u8, Safe, NoAccess>;
-///     fn random_byte(self) -> FakeRegister<Self, u8, Safe, NoAccess> {
-///         FakeRegister::new(self).on_read(|this| {
+///     fn random_byte(&self) -> FakeRegister<Self, u8, Safe, NoAccess> {
+///         FakeRegister::new(*self).on_read(|this| {
 ///             let next = this.0.get().wrapping_add(1);
 ///             this.0.set(next);
 ///             next
@@ -167,7 +167,7 @@ impl sealed::Access for Safe {}
 /// impl<'f> storage::Interface for &'f Fake {
 ///     type scratch = FakeRegisterArray<
 ///         Self, FakeRegister<&'f Cell<u8>, u8, Safe, Safe>, storage::lens::scratch>;
-///     fn scratch(self) -> Self::scratch {
+///     fn scratch(&self) -> Self::scratch {
 ///         FakeRegisterArray::new(self, |s, i| Some(
 ///             FakeRegister::new(s.0.get(i)?)
 ///                 .on_read(|c| c.get())

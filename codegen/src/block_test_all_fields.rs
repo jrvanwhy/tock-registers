@@ -39,28 +39,28 @@ fn all_field_types_example() {
         pub mod foo {
             #![allow(non_camel_case_types)]
             use super::*;
-            #interface_comment pub trait Interface: ::tock_registers::internal::core::marker::Copy {
+            #interface_comment pub trait Interface: ::tock_registers::internal::core::clone::Clone {
                 type scalar_definition:
                     ::tock_registers::Register<DataType = u8> + Read + Dance<Waltz>;
-                fn scalar_definition(self) -> Self::scalar_definition;
+                fn scalar_definition(&self) -> Self::scalar_definition;
                 type array_definition: ::tock_registers::RegisterArray<
                     lens::array_definition<1usize>,
                     Element: ::tock_registers::RegisterArray<lens::array_definition<0usize>,
                         Element: ::tock_registers::Register<DataType = u8> + Read + Write> >;
-                fn array_definition(self) -> Self::array_definition;
+                fn array_definition(&self) -> Self::array_definition;
                 type scalar_reference: a::Interface;
-                fn scalar_reference(self) -> Self::scalar_reference;
+                fn scalar_reference(&self) -> Self::scalar_reference;
                 type array_reference: ::tock_registers::RegisterArray<
                     lens::array_reference<1usize>, Element: ::tock_registers::RegisterArray<
                         lens::array_reference<0usize>, Element: b::Interface> >;
-                fn array_reference(self) -> Self::array_reference;
+                fn array_reference(&self) -> Self::array_reference;
                 type flat_array_definition: ::tock_registers::RegisterArray<
                     lens::flat_array_definition, Element:
                         ::tock_registers::Register<DataType = u8> + Read>;
-                fn flat_array_definition(self) -> Self::flat_array_definition;
+                fn flat_array_definition(&self) -> Self::flat_array_definition;
                 type flat_array_reference: ::tock_registers::RegisterArray<
                     lens::flat_array_reference, Element: c::Interface>;
-                fn flat_array_reference(self) -> Self::flat_array_reference;
+                fn flat_array_reference(&self) -> Self::flat_array_reference;
             }
             pub mod lens {
                 pub enum array_definition<const N: usize> {}
@@ -169,7 +169,7 @@ fn all_field_types_example() {
                 c::Real<B>: c::Interface,
             {
                 type scalar_definition = real_scalar_definition<B>;
-                fn scalar_definition(self) -> Self::scalar_definition {
+                fn scalar_definition(&self) -> Self::scalar_definition {
                     unsafe {
                         Self::scalar_definition::new(
                             self.address.byte_add(<B as Bus>::scalar_definition_offset))
@@ -178,14 +178,14 @@ fn all_field_types_example() {
                 type array_definition = ::tock_registers::RealRegisterArray<
                     ::tock_registers::RealRegisterArray<real_array_definition<B>,
                         lens::array_definition<0usize> >, lens::array_definition<1usize> >;
-                fn array_definition(self) -> Self::array_definition {
+                fn array_definition(&self) -> Self::array_definition {
                     unsafe {
                         Self::array_definition::new(
                             self.address.byte_add(<B as Bus>::array_definition_offset))
                     }
                 }
                 type scalar_reference = a::Real<B>;
-                fn scalar_reference(self) -> Self::scalar_reference {
+                fn scalar_reference(&self) -> Self::scalar_reference {
                     unsafe {
                         Self::scalar_reference::new(
                             self.address.byte_add(<B as Bus>::scalar_reference_offset))
@@ -194,7 +194,7 @@ fn all_field_types_example() {
                 type array_reference = ::tock_registers::RealRegisterArray<
                     ::tock_registers::RealRegisterArray<b::Real<B>, lens::array_reference<0usize>
                     >, lens::array_reference<1usize> >;
-                fn array_reference(self) -> Self::array_reference {
+                fn array_reference(&self) -> Self::array_reference {
                     unsafe {
                         Self::array_reference::new(
                             self.address.byte_add(<B as Bus>::array_reference_offset))
@@ -202,7 +202,7 @@ fn all_field_types_example() {
                 }
                 type flat_array_definition = ::tock_registers::RealRegisterArray<
                     real_flat_array_definition<B>, lens::flat_array_definition>;
-                fn flat_array_definition(self) -> Self::flat_array_definition {
+                fn flat_array_definition(&self) -> Self::flat_array_definition {
                     unsafe {
                         Self::flat_array_definition::new(
                             self.address.byte_add(<B as Bus>::flat_array_definition_offset))
@@ -210,7 +210,7 @@ fn all_field_types_example() {
                 }
                 type flat_array_reference =
                     ::tock_registers::RealRegisterArray<c::Real<B>, lens::flat_array_reference>;
-                fn flat_array_reference(self) -> Self::flat_array_reference {
+                fn flat_array_reference(&self) -> Self::flat_array_reference {
                     unsafe {
                         Self::flat_array_reference::new(
                             self.address.byte_add(<B as Bus>::flat_array_reference_offset))
