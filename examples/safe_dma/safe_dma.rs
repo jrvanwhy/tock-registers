@@ -2,8 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright Tock Contributors 2026.
 
-//! Example of a safe DMA abstraction crate. This is obviously simplified relative to a real DMA
-//! crate, e.g. it only supports 'static buffers.
+//! Example of a safe DMA abstraction crate.
+//!
+//! Peripheral drivers using this crate use
+//! [register_map](tock_registers::register_map) and
+//! [dma_manager](crate::dma_manager) to tell tock-registers and this crate
+//! about the register map and DMA configuration (respectively), but can then
+//! perform DMA operations from safe code.
+//!
+//! This example is obviously simplified relative to a real DMA crate, e.g. it
+//! only supports 'static buffers.
 
 use core::cell::Cell;
 use tock_registers::{Bus, DataType, Register};
@@ -233,7 +241,12 @@ macro_rules! dma_manager {
     };
 }
 
-/// A fake register that implements UnsafeWrite by writing the passed value into the given Cell.
+/// A fake register that implements UnsafeWrite by writing the passed value into
+/// the given Cell.
+///
+/// Performs the same function as [FakeRegister](tock_registers::FakeRegister),
+/// but for `UnsafeWrite` instead of `Write` — this reduces the boilerplate
+/// required to implement a fake version of a peripheral.
 pub struct FakeUnsafeWrite<'c, T: DataType>(&'c Cell<T::Value>);
 
 impl<'c, T: DataType> FakeUnsafeWrite<'c, T> {
