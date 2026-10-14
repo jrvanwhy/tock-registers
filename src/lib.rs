@@ -9,7 +9,6 @@
 //!
 //! ```rust
 //! # fn main() {}
-//!
 //! use tock_registers::{mmio32_register_map, register_bitfields, Read, Write};
 //!
 //! // Register maps are specified like this:
