@@ -9,12 +9,14 @@
 #![no_std]
 // -------------------------------------------------------------------------------------------------
 // rustc allowed-by-default lints. For ease of future updates, this is every lint from
-// https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html that is recognized by MSRV
-// toolchain.
+// https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html that is
+// recognized by the MSRV toolchain.
 // -------------------------------------------------------------------------------------------------
 #![forbid(absolute_paths_not_starting_with_crate)]
 #![forbid(ambiguous_negative_literals)]
 // async_idents was renamed to keyword_idents_2018
+#![forbid(closure_returning_async_block)]
+#![forbid(dead_code_pub_in_binary)]
 #![forbid(deprecated_safe_2024)]
 #![forbid(deref_into_dyn_supertrait)]
 // disjoint_capture_migration was renamed to rust_2021_incompatible_closure_captures
@@ -23,12 +25,14 @@
 #![forbid(elided_lifetimes_in_paths)]
 #![forbid(explicit_outlives_requirements)]
 #![forbid(ffi_unwind_calls)]
+#![forbid(if_let_rescope)]
 #![forbid(impl_trait_overcaptures)]
 #![forbid(impl_trait_redundant_captures)]
 #![forbid(keyword_idents)]
 #![forbid(keyword_idents_2018)]
 #![forbid(keyword_idents_2024)]
 #![forbid(let_underscore_drop)]
+#![forbid(linker_info)]
 #![forbid(macro_use_extern_crate)]
 #![forbid(meta_variable_misuse)]
 #![forbid(missing_copy_implementations)]
@@ -37,12 +41,15 @@
 #![forbid(missing_unsafe_on_extern)]
 #![forbid(non_ascii_idents)]
 // or_patterns_back_compat was renamed to rust_2021_incompatible_or_patterns
+#![forbid(raw_borrows_via_references)]
 #![forbid(redundant_imports)]
 #![forbid(redundant_lifetimes)]
 #![forbid(rust_2021_incompatible_closure_captures)]
 #![forbid(rust_2021_incompatible_or_patterns)]
 #![forbid(rust_2021_prefixes_incompatible_syntax)]
 #![forbid(rust_2021_prelude_collisions)]
+#![forbid(rust_2024_guarded_string_incompatible_syntax)]
+#![forbid(rust_2024_incompatible_pat)]
 #![forbid(rust_2024_prelude_collisions)]
 // single_use_lifetime was renamed to single_use_lifetimes
 #![forbid(single_use_lifetimes)]
